@@ -246,13 +246,23 @@ status_color() {
 CTX_COLOR=$c_green
 [ -n "$used" ] && CTX_COLOR=$(status_color "$used")
 
-# ── OSC 8 clickable link for Ghostty ──
+# ── OSC 8 clickable links for Ghostty ──
 osc_link() {
   printf '\033]8;;file://%s\033\\%s\033]8;;\033\\' "$1" "$2"
 }
+osc_url() {
+  printf '\033]8;;%s\033\\%s\033]8;;\033\\' "$1" "$2"
+}
 
-# ── Git branch ──
+# ── Git branch + remote GitHub URL ──
 git_branch=$(git -C "$dir" symbolic-ref --short HEAD 2>/dev/null)
+git_remote_raw=$(git -C "$dir" remote get-url origin 2>/dev/null)
+# Convert SSH (git@github.com:user/repo.git) or HTTPS to a browser URL
+github_url=""
+if [ -n "$git_remote_raw" ]; then
+  github_url=$(echo "$git_remote_raw" \
+    | sed 's|git@github\.com:|https://github.com/|; s|\.git$||')
+fi
 
 # Separator character
 S="${c_sep} │ ${RST}"
@@ -265,7 +275,15 @@ exec 2>/dev/null
 # ═══════════════════════════════════════════════════
 printf "${c_sapphire}"
 osc_link "$dir" "$dir"
-[ -n "$git_branch" ] && printf "${RST}${S}${c_green}%s${RST}" "$git_branch"
+if [ -n "$git_branch" ]; then
+  printf "${RST}${S}${c_green}"
+  if [ -n "$github_url" ]; then
+    osc_url "$github_url/tree/$git_branch" "$git_branch"
+  else
+    printf "%s" "$git_branch"
+  fi
+  printf "${RST}"
+fi
 printf "${RST}${S}${c_subtext}%s${RST}" "$duration_human"
 [ -n "$vim_mode" ] && printf "${S}${c_mauve}VIM ${BOLD}%s${RST}" "$vim_mode"
 [ -n "$agent_name" ] && printf "${S}${c_lavender}%s${RST}" "$agent_name"
@@ -279,6 +297,7 @@ printf "${c_lavender}${BOLD}%s${RST}" "$model"
 printf "${S}${c_label}v%s${RST}" "$ver"
 printf "${S}${c_gold}${BOLD}%s${RST}" "$f_cost"
 printf "${S}"
+USAGE_URL="https://claude.ai/settings/usage"
 if [ -n "$five_hr_used" ] && [ -n "$seven_day_used" ]; then
   # Sanitize to integers (strip decimals, default to 0)
   five_hr_used=${five_hr_used%%.*}
@@ -291,13 +310,22 @@ if [ -n "$five_hr_used" ] && [ -n "$seven_day_used" ]; then
   SEVEN_C=$(status_color "$seven_day_used")
   f_five_r=$(fmt_reset "$five_hr_reset")
   f_seven_r=$(fmt_reset_days "$seven_day_reset")
+  # Build quota text, then wrap entire block in OSC 8 link
+  five_text="${five_left}% left"
+  [ -n "$f_five_r" ] && five_text="${five_text} ${f_five_r}"
+  seven_text="${seven_left}% left"
+  [ -n "$f_seven_r" ] && seven_text="${seven_text} ${f_seven_r}"
+  printf '\033]8;;%s\033\\' "$USAGE_URL"
   printf "${FIVE_C}${BOLD}%s%%${RST}${c_label} left${RST}" "$five_left"
   [ -n "$f_five_r" ] && printf " ${c_dim}%s${RST}" "$f_five_r"
   printf "${S}"
   printf "${SEVEN_C}${BOLD}%s%%${RST}${c_label} left${RST}" "$seven_left"
   [ -n "$f_seven_r" ] && printf " ${c_dim}%s${RST}" "$f_seven_r"
+  printf '\033]8;;\033\\'
 else
+  printf '\033]8;;%s\033\\' "$USAGE_URL"
   printf "${c_label}Quota  —${RST}"
+  printf '\033]8;;\033\\'
 fi
 printf '\n'
 
